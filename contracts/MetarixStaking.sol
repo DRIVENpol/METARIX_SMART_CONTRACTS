@@ -463,7 +463,7 @@ contract MetarixStaking_V1 is Ownable {
     }
 
     /// @dev Funciton to fetch total staked tokens across all pools
-    function fethAllStakedTokens() public view returns(uint256) {
+    function fetchAllStakedTokens() public view returns(uint256) {
         uint256 totalStaked;
         for(uint256 i=0; i < pools.length; i++) {
             totalStaked += totalStakedByPool[i];
