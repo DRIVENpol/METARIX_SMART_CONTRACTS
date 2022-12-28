@@ -33,6 +33,9 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Compund period
     uint256 compoundPeriod;
 
+    /// @dev Analytics
+    mapping(uint256 => uint256) public totalStakedByPool;
+
     /// @dev Pause the smart contract
     bool public isPaused;
 
@@ -77,6 +80,7 @@ contract MetarixStaking_V1 is Ownable {
     event NewEmergencyFee(uint256 fee);
     event NewCompundPeriod(uint256 period);
     event NewAprFactorForUsers(uint256 apr);
+    event AddPool(uint256 apr, uint256 period);
     event NewApr(uint256 poolId, uint256 newApr);
     event EnablePool(uint256 poolId, bool status);
     event DisablePool(uint256 poolId, bool status);
@@ -125,8 +129,8 @@ contract MetarixStaking_V1 is Ownable {
     function stake(uint256 poolId, uint256 amount) external {
         if(isPaused == true) revert ContractIsPaused();
         if(poolId >= pools.length) revert InvalidPoolId();
-        if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
-        if(metarix.transferFrom(msg.sender, address(this), amount) == false) revert InvalidErc20Transfer();
+        // if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
+        // if(metarix.transferFrom(msg.sender, address(this), amount) == false) revert InvalidErc20Transfer();
         Pool memory pool = pools[poolId];
 
         if(pool.enabled == false) revert PoolDisabled();
@@ -147,6 +151,7 @@ contract MetarixStaking_V1 is Ownable {
         deposits.push(newDeposit);
 
         pools[poolId].totalStakers++;
+        totalStakedByPool[poolId] += amount;
 
         // Decrease the APR by aprFactor% for each new staker
         pools[poolId].apr -= aprFactor;
@@ -186,6 +191,7 @@ contract MetarixStaking_V1 is Ownable {
         // Increase the APR by aprFactor% for each new staker
         pools[_poolId].apr += aprFactor;
         pools[_poolId].totalStakers--;
+       totalStakedByPool[_poolId] -= _amount;
 
         emit Unstake(msg.sender, _poolId, depositId, _totalAmount);
     }
@@ -217,6 +223,7 @@ contract MetarixStaking_V1 is Ownable {
         // Increase the APR by aprFactor% for each new staker
         pools[_poolId].apr += aprFactor;
         pools[_poolId].totalStakers--;
+        totalStakedByPool[_poolId] -= _totalAmount;
 
         emit EmergencyWithdraw(msg.sender, _poolId, depositId, _totalAmount);
     }
@@ -413,6 +420,14 @@ contract MetarixStaking_V1 is Ownable {
         }
     }
 
+    /// @dev Funciton to add a new pool
+    function addPool(uint256 apr, uint256 period) external onlyOwner {
+        uint256 _id = pools.length;
+        pools.push(Pool(_id, apr, period, 0, true));
+
+        emit AddPool(apr, period);
+    }
+
     /// @dev Function to withdraw tokens from the smart contract
     function withdrawErc20Tokens(address token) external onlyOwner {
         uint256 _balance = IToken(token).balanceOf(address(this));
@@ -430,5 +445,44 @@ contract MetarixStaking_V1 is Ownable {
         if(sent == false) revert FailedEthTransfer();
 
         emit RescueBNB(_amount);
+    }
+
+    /// @dev Function to fetch user's deposits
+    function fetchUsersDeposit(address user) public view returns(uint256[] memory){
+        return userDeposits[user];
+    }
+
+    /// @dev Function to fetch deposit details
+    function fetchDepositDetails(uint256 depositId) public view returns(Deposit memory){
+        return deposits[depositId];
+    }
+
+    /// @dev Function to fethc pool details
+    function fetchPoolDetails(uint256 poolId) public view returns(Pool memory) {
+        return pools[poolId];
+    }
+
+    /// @dev Funciton to fetch total staked tokens across all pools
+    function fethAllStakedTokens() public view returns(uint256) {
+        uint256 totalStaked;
+        for(uint256 i=0; i < pools.length; i++) {
+            totalStaked += totalStakedByPool[i];
+        }
+        return totalStaked;
+    }
+
+    /// @dev Function to fetch the staked amount for each deposit
+    function fetchTotalStakedByPool(uint256 id) public view returns(uint256) {
+           return totalStakedByPool[id];
+    }
+
+    /// @dev Fetch the length of pools
+    function fetchPoolsLength() public view returns(uint256) {
+        return pools.length;
+    }
+
+    /// @dev Fetch the length of deposits
+    function fetchDepositsLength() public view returns(uint256) {
+        return deposits.length;
     }
 }
