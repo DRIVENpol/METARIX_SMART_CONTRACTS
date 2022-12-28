@@ -308,7 +308,7 @@ contract MetarixStaking_V1 is Ownable {
     }
 
     /// @dev Function to change the apr factor
-    function changeAprFactorForUSers(uint256 newFactor) external onlyOwner {
+    function changeAprFactorForUsers(uint256 newFactor) external onlyOwner {
         aprFactorForUsers = newFactor;
 
         emit NewAprFactorForUsers(newFactor);
