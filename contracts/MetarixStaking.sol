@@ -103,7 +103,9 @@ contract MetarixStaking_V1 is Ownable {
     error ContractIsPaused();
     error CantStakeThatMuch();
     error FailedEthTransfer();
+    error NotEnoughAllowance();
     error InvalidErc20Transfer();
+    error FailedToGiveAllowance();
 
     /// @dev Constructor
     constructor(address _metarix) {
@@ -129,8 +131,9 @@ contract MetarixStaking_V1 is Ownable {
     function stake(uint256 poolId, uint256 amount) external {
         if(isPaused == true) revert ContractIsPaused();
         if(poolId >= pools.length) revert InvalidPoolId();
-        // if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
-        // if(metarix.transferFrom(msg.sender, address(this), amount) == false) revert InvalidErc20Transfer();
+        if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
+        if(metarix.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
+        if(metarix.transferFrom(msg.sender, address(this), amount) == false) revert InvalidErc20Transfer();
         Pool memory pool = pools[poolId];
 
         if(pool.enabled == false) revert PoolDisabled();
@@ -186,7 +189,8 @@ contract MetarixStaking_V1 is Ownable {
         // Send rewards
         uint256 _totalAmount = _amount + _pending;
         
-        if(metarix.transfer(myDeposit.owner, _totalAmount) == false) revert InvalidErc20Transfer();
+        if(metarix.approve(_depositOwner, _totalAmount) == false) revert FailedToGiveAllowance();
+        if(metarix.transfer(_depositOwner, _totalAmount) == false) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
         pools[_poolId].apr += aprFactor;
@@ -218,6 +222,7 @@ contract MetarixStaking_V1 is Ownable {
         uint256 _takenFee = _amount * fee / 100;
         uint256 _totalAmount = _amount  - _takenFee;
         
+        if(metarix.approve(_depositOwner, _totalAmount) == false) revert FailedToGiveAllowance();
         if(metarix.transfer(myDeposit.owner, _totalAmount) == false) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
