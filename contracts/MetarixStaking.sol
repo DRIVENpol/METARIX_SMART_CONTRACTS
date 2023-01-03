@@ -134,6 +134,7 @@ contract MetarixStaking_V1 is Ownable {
         if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
         if(metarix.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
         if(metarix.transferFrom(msg.sender, address(this), amount) == false) revert InvalidErc20Transfer();
+        
         Pool memory pool = pools[poolId];
 
         if(pool.enabled == false) revert PoolDisabled();
