@@ -14,7 +14,7 @@ interface IToken {
 
 /**
  * @title Staking Smart Contract
- * @notice Custom made smart contract to stake Metarix Tokens
+ * @notice Custom made smart contract to stake Metarix Token
  * @author Socarde Paul-Constantin, DRIVENlabs Inc.
  */
 
