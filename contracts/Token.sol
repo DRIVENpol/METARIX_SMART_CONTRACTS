@@ -7,6 +7,6 @@ pragma solidity 0.8.17;
 
 contract Token is ERC20, Ownable {
     constructor() ERC20("THE_TOKEN", "TOKEN") {
-        _mint(msg.sender, 10_000 * 10 ** 18);
+        _mint(msg.sender, 10_000_000 * 10 ** 18);
     }
 }

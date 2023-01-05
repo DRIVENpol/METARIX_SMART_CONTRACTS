@@ -266,7 +266,7 @@ contract MetarixStaking_V1 is Ownable {
 
     /// @dev Function to compute pending rewards
     /// @return _pendingRewards Return pending rewards
-    function computePendingRewards(address user, uint256 poolId, uint256 depositId, uint256 amount) internal view returns(uint256) {
+    function computePendingRewards(address user, uint256 poolId, uint256 depositId, uint256 amount) public view returns(uint256) {
         Pool memory pool = pools[poolId];
         Deposit memory deposit = deposits[depositId];
 
@@ -283,21 +283,14 @@ contract MetarixStaking_V1 is Ownable {
         uint256 _rPerHour = _rPerDay / 24;
         uint256 _rPerMinute = _rPerHour / 60;
         uint256 _rPerSecond = _rPerMinute / 60;
-
-        uint256 _delta = block.timestamp - deposit.startDate;
         uint256 _pendingRewards;
 
-        // If deposit not ended
+               // If deposit not ended
         if(block.timestamp < deposit.endDate) {
+            uint256 _delta = block.timestamp - deposit.startDate;
             _pendingRewards = (_delta * _rPerSecond) - _compounded;
-        } else { // If deposit ended
-                if(_period == 30) {
-                    _pendingRewards = _rPerDay * 30;
-                } else if(_period == 180) {
-                    _pendingRewards = _rPerDay * 180;
-                } else if(_period == 365) {
-                    _pendingRewards = _rPerYear;
-                }
+        } else if(block.timestamp >= deposit.endDate) { // If deposit ended
+            _pendingRewards = _rPerDay * _period;
         }
         return _pendingRewards / 100;
     }
