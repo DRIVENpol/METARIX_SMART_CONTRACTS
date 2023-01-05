@@ -30,7 +30,7 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Fee for emergency withdraw
     uint256 public fee;
 
-    /// @dev Compund period
+    /// @dev Compound period
     uint256 compoundPeriod;
 
     /// @dev Analytics
@@ -70,15 +70,15 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Add increased APR for certain users
     mapping(address => bool) public hasIncreasedApr;
 
-    /// @dev Track last compund date
-    mapping(address => uint256) public lastCompundDate;
+    /// @dev Track last compound date
+    mapping(address => uint256) public lastCompoundDate;
 
     /// @dev Events
     event RescueBNB(uint256 amount);
     event TogglePause(bool status);
     event NewAprFactor(uint256 apr);
     event NewEmergencyFee(uint256 fee);
-    event NewCompundPeriod(uint256 period);
+    event NewCompoundPeriod(uint256 period);
     event NewAprFactorForUsers(uint256 apr);
     event AddPool(uint256 apr, uint256 period);
     event NewApr(uint256 poolId, uint256 newApr);
@@ -94,7 +94,7 @@ contract MetarixStaking_V1 is Ownable {
     event EmergencyWithdraw(address indexed user, uint256 poolId, uint256 depositId, uint256 amount);
 
     /// @dev Errors
-    error CantCompund();
+    error CantCompound();
     error InvalidOwner();
     error EndedDeposit();
     error PoolDisabled();
@@ -234,7 +234,7 @@ contract MetarixStaking_V1 is Ownable {
         emit EmergencyWithdraw(msg.sender, _poolId, depositId, _totalAmount);
     }
 
-    /// @dev Function to compund the pending rewards
+    /// @dev Function to compound the pending rewards
     function compound(uint256 depositId) external {
         if(isPaused == true) revert ContractIsPaused();
         Deposit memory myDeposit = deposits[depositId];
@@ -243,8 +243,8 @@ contract MetarixStaking_V1 is Ownable {
         uint256 _endDate = myDeposit.endDate;
 
         if(msg.sender != _depositOwner) revert InvalidOwner();
-        if(block.timestamp > _endDate) revert CantCompund();
-        if(lastCompundDate[_depositOwner] + compoundPeriod > block.timestamp) revert CantCompund();
+        if(block.timestamp > _endDate) revert CantCompound();
+        if(lastCompoundDate[_depositOwner] + compoundPeriod > block.timestamp) revert CantCompound();
         if(myDeposit.ended == true) revert EndedDeposit();
 
         uint256 _amount = myDeposit.amount;
@@ -252,7 +252,7 @@ contract MetarixStaking_V1 is Ownable {
         
         if(pools[_poolId].enabled == false) revert PoolDisabled();
 
-        lastCompundDate[_depositOwner] = block.timestamp;
+        lastCompoundDate[_depositOwner] = block.timestamp;
 
         // Compute rewards
         uint256 _pending = computePendingRewards(_depositOwner, _poolId, depositId, _amount);
@@ -327,11 +327,11 @@ contract MetarixStaking_V1 is Ownable {
         emit NewEmergencyFee(newFee);
     }
 
-    /// @dev Function to change the compund period
-    function changeCompundPeriod(uint256 newPeriod) external onlyOwner {
+    /// @dev Function to change the compound period
+    function changeCompoundPeriod(uint256 newPeriod) external onlyOwner {
         compoundPeriod = newPeriod * 1 hours;
 
-        emit NewCompundPeriod(newPeriod * 1 hours);
+        emit NewCompoundPeriod(newPeriod * 1 hours);
     }
 
     /// @dev Function to set user with increased apr
