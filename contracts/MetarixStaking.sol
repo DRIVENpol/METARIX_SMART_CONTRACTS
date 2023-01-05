@@ -173,8 +173,8 @@ contract MetarixStaking_V1 is Ownable {
         uint256 _endDate = myDeposit.endDate;
 
         if(msg.sender != _depositOwner) revert InvalidOwner();
-        if(block.timestamp < _endDate) revert CantUnstakeNow();
         if(myDeposit.ended == true) revert EndedDeposit();
+        if(block.timestamp < _endDate) revert CantUnstakeNow();
 
         uint256 _amount = myDeposit.amount;
         uint256 _poolId = myDeposit.poolId;
