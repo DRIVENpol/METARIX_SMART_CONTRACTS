@@ -31,9 +31,6 @@ contract MetarixFarming_V1 is Ownable {
     /// @dev Fee for emergency withdraw
     uint256 public fee;
 
-    /// @dev Compound period
-    uint256 compoundPeriod;
-
     /// @dev Analytics
     mapping(uint256 => uint256) public totalStakedByPool;
 
@@ -54,7 +51,6 @@ contract MetarixFarming_V1 is Ownable {
         uint256 depositId;
         uint256 poolId;
         uint256 amount;
-        uint256 compounded;
         uint256 startDate;
         uint256 endDate;
         address owner;
@@ -71,9 +67,6 @@ contract MetarixFarming_V1 is Ownable {
     /// @dev Add increased APR for certain users
     mapping(address => bool) public hasIncreasedApr;
 
-    /// @dev Track last compound date
-    mapping(address => uint256) public lastCompoundDate;
-
     /// @dev Events
     event TogglePause(bool status);
     event NewAprFactor(uint256 apr);
@@ -81,7 +74,6 @@ contract MetarixFarming_V1 is Ownable {
     event NewEmergencyFee(uint256 fee);
     event NewTokenAddress(address token);
     event NewLpTokenAddress(address token);
-    event NewCompoundPeriod(uint256 period);
     event NewAprFactorForUsers(uint256 apr);
     event AddPool(uint256 apr, uint256 period);
     event NewApr(uint256 poolId, uint256 newApr);
@@ -93,11 +85,9 @@ contract MetarixFarming_V1 is Ownable {
     event WithdrawErc20Tokens(address indexed token, uint256 amount);
     event Stake(address indexed user, uint256 poolId, uint256 amount);
     event Unstake(address indexed user, uint256 poolId, uint256 depositId, uint256 amount);
-    event Compound(address indexed user, uint256 poolId, uint256 depositId, uint256 amount);
     event EmergencyWithdraw(address indexed user, uint256 poolId, uint256 depositId, uint256 amount);
 
     /// @dev Errors
-    error CantCompound();
     error InvalidOwner();
     error EndedDeposit();
     error PoolDisabled();
@@ -125,7 +115,6 @@ contract MetarixFarming_V1 is Ownable {
         aprFactorForUsers = 250; // 2.5%
 
         fee = 10; // 10%
-        compoundPeriod = 1 days; // 1 day
 
         isPaused = false;
     }
@@ -150,7 +139,6 @@ contract MetarixFarming_V1 is Ownable {
         deposits.length,
         poolId, 
         amount,
-        0,
         block.timestamp,
         block.timestamp + _period,
         msg.sender,
@@ -266,7 +254,6 @@ contract MetarixFarming_V1 is Ownable {
 
         uint256 _apr = pool.apr;
         uint256 _period = pool.periodInDays;
-        uint256 _compounded = deposit.compounded;
 
         if(hasIncreasedApr[user] == true) {
             _apr += aprFactorForUsers;
@@ -282,7 +269,7 @@ contract MetarixFarming_V1 is Ownable {
                // If deposit not ended
         if(block.timestamp < deposit.endDate) {
             uint256 _delta = block.timestamp - deposit.startDate;
-            _pendingRewards = (_delta * _rPerSecond) - _compounded;
+            _pendingRewards = _delta * _rPerSecond;
         } else if(block.timestamp >= deposit.endDate) { // If deposit ended
             _pendingRewards = _rPerDay * _period;
         }
@@ -319,13 +306,6 @@ contract MetarixFarming_V1 is Ownable {
         fee = newFee;
     
         emit NewEmergencyFee(newFee);
-    }
-
-    /// @dev Function to change the compound period
-    function changeCompoundPeriod(uint256 newPeriod) external onlyOwner {
-        compoundPeriod = newPeriod * 1 hours;
-
-        emit NewCompoundPeriod(newPeriod * 1 hours);
     }
 
     /// @dev Function to set user with increased apr
