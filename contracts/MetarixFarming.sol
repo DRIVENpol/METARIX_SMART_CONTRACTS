@@ -18,10 +18,11 @@ interface IToken {
  * @author Socarde Paul-Constantin, DRIVENlabs Inc.
  */
 
-contract MetarixStaking_V1 is Ownable {
+contract MetarixFarming_V1 is Ownable {
 
     /// @dev Metarix Token
     IToken public metarix;
+    IToken public metarixLp;
 
     /// @dev Variable to increase/decrease the APR
     uint256 public aprFactor;
@@ -74,11 +75,10 @@ contract MetarixStaking_V1 is Ownable {
     mapping(address => uint256) public lastCompoundDate;
 
     /// @dev Events
+    event RescueBNB(uint256 amount);
     event TogglePause(bool status);
     event NewAprFactor(uint256 apr);
-    event RescueBNB(uint256 amount);
     event NewEmergencyFee(uint256 fee);
-    event NewTokenAddress(address token);
     event NewCompoundPeriod(uint256 period);
     event NewAprFactorForUsers(uint256 apr);
     event AddPool(uint256 apr, uint256 period);
@@ -105,13 +105,13 @@ contract MetarixStaking_V1 is Ownable {
     error CantStakeThatMuch();
     error FailedEthTransfer();
     error NotEnoughAllowance();
-    error AddressAlreadyInUse();
     error InvalidErc20Transfer();
     error FailedToGiveAllowance();
 
     /// @dev Constructor
-    constructor(address _metarix) {
+    constructor(address _metarix, address _metarixLp) {
         metarix = IToken(_metarix);
+        metarixLp = IToken(_metarixLp);
         
         // Create pools
         pools.push(Pool(0, 1000, 30, 0, true));
@@ -133,9 +133,9 @@ contract MetarixStaking_V1 is Ownable {
     function stake(uint256 poolId, uint256 amount) external {
         if(isPaused == true) revert ContractIsPaused();
         if(poolId >= pools.length) revert InvalidPoolId();
-        if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
-        if(metarix.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
-        if(metarix.transferFrom(msg.sender, address(this), amount) == false) revert InvalidErc20Transfer();
+        if(metarixLp.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
+        if(metarixLp.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
+        if(metarixLp.transferFrom(msg.sender, address(this), amount) == false) revert InvalidErc20Transfer();
         
         Pool memory pool = pools[poolId];
 
@@ -192,8 +192,11 @@ contract MetarixStaking_V1 is Ownable {
         // Send rewards
         uint256 _totalAmount = _amount + _pending;
         
-        if(metarix.approve(_depositOwner, _totalAmount) == false) revert FailedToGiveAllowance();
-        if(metarix.transfer(_depositOwner, _totalAmount) == false) revert InvalidErc20Transfer();
+        if(metarixLp.approve(_depositOwner, _pending) == false) revert FailedToGiveAllowance();
+        if(metarixLp.transfer(_depositOwner, _pending) == false) revert InvalidErc20Transfer();
+
+        if(metarix.approve(_depositOwner, _pending) == false) revert FailedToGiveAllowance();
+        if(metarix.transfer(_depositOwner, _pending) == false) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
         pools[_poolId].apr += aprFactor;
@@ -427,14 +430,6 @@ contract MetarixStaking_V1 is Ownable {
         pools.push(Pool(_id, apr, period, 0, true));
 
         emit AddPool(apr, period);
-    }
-
-    /// @dev Change the Metarix address in case of migration
-    function changeMetarixAddress(address newToken) external onlyOwner {
-        if(newToken == address(metarix)) revert AddressAlreadyInUse();
-        metarix = IToken(newToken);
-
-        emit NewTokenAddress(newToken);
     }
 
     /// @dev Function to withdraw tokens from the smart contract
