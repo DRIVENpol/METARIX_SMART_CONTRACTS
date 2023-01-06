@@ -266,7 +266,7 @@ contract MetarixFarming_V1 is Ownable {
         uint256 _rPerSecond = _rPerMinute / 60;
         uint256 _pendingRewards;
 
-               // If deposit not ended
+        // If deposit not ended
         if(block.timestamp < deposit.endDate) {
             uint256 _delta = block.timestamp - deposit.startDate;
             _pendingRewards = _delta * _rPerSecond;
