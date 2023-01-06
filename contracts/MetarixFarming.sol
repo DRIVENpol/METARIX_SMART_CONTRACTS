@@ -75,10 +75,12 @@ contract MetarixFarming_V1 is Ownable {
     mapping(address => uint256) public lastCompoundDate;
 
     /// @dev Events
-    event RescueBNB(uint256 amount);
     event TogglePause(bool status);
     event NewAprFactor(uint256 apr);
+    event RescueBNB(uint256 amount);
     event NewEmergencyFee(uint256 fee);
+    event NewTokenAddress(address token);
+    event NewLpTokenAddress(address token);
     event NewCompoundPeriod(uint256 period);
     event NewAprFactorForUsers(uint256 apr);
     event AddPool(uint256 apr, uint256 period);
@@ -105,6 +107,7 @@ contract MetarixFarming_V1 is Ownable {
     error CantStakeThatMuch();
     error FailedEthTransfer();
     error NotEnoughAllowance();
+    error AddressAlreadyInUse();
     error InvalidErc20Transfer();
     error FailedToGiveAllowance();
 
@@ -228,8 +231,8 @@ contract MetarixFarming_V1 is Ownable {
         uint256 _takenFee = _amount * fee / 100;
         uint256 _totalAmount = _amount  - _takenFee;
         
-        if(metarix.approve(_depositOwner, _totalAmount) == false) revert FailedToGiveAllowance();
-        if(metarix.transfer(myDeposit.owner, _totalAmount) == false) revert InvalidErc20Transfer();
+        if(metarixLp.approve(_depositOwner, _totalAmount) == false) revert FailedToGiveAllowance();
+        if(metarixLp.transfer(myDeposit.owner, _totalAmount) == false) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
         pools[_poolId].apr += aprFactor;
@@ -239,34 +242,20 @@ contract MetarixFarming_V1 is Ownable {
         emit EmergencyWithdraw(msg.sender, _poolId, depositId, _totalAmount);
     }
 
-    /// @dev Function to compound the pending rewards
-    function compound(uint256 depositId) external {
-        if(isPaused == true) revert ContractIsPaused();
-        Deposit memory myDeposit = deposits[depositId];
-        
-        address _depositOwner = myDeposit.owner;
-        uint256 _endDate = myDeposit.endDate;
+    /// @dev Change the Metarix address in case of migration
+    function changeMetarixAddress(address newToken) external onlyOwner {
+        if(newToken == address(metarix)) revert AddressAlreadyInUse();
+        metarix = IToken(newToken);
 
-        if(msg.sender != _depositOwner) revert InvalidOwner();
-        if(block.timestamp > _endDate) revert CantCompound();
-        if(lastCompoundDate[_depositOwner] + compoundPeriod > block.timestamp) revert CantCompound();
-        if(myDeposit.ended == true) revert EndedDeposit();
+        emit NewTokenAddress(newToken);
+    }
 
-        uint256 _amount = myDeposit.amount;
-        uint256 _poolId = myDeposit.poolId;
-        
-        if(pools[_poolId].enabled == false) revert PoolDisabled();
+    /// @dev Change the Metarix LP address in case of migration
+    function changeMetarixLpAddress(address newToken) external onlyOwner {
+        if(newToken == address(metarixLp)) revert AddressAlreadyInUse();
+        metarixLp = IToken(newToken);
 
-        lastCompoundDate[_depositOwner] = block.timestamp;
-
-        // Compute rewards
-        uint256 _pending = computePendingRewards(_depositOwner, _poolId, depositId, _amount);
-
-        // Compound
-        deposits[depositId].amount += _pending;
-        deposits[depositId].compounded += _pending;
-
-        emit Compound(msg.sender, _poolId, depositId, _pending);
+        emit NewLpTokenAddress(newToken);
     }
 
     /// @dev Function to compute pending rewards
