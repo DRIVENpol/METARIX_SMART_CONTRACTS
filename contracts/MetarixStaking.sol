@@ -100,6 +100,8 @@ contract MetarixStaking_V1 is Ownable {
     error EndedDeposit();
     error PoolDisabled();
     error InvalidPoolId();
+    error InvalidAmount();
+    error InvalidDeposit();
     error CantUnstakeNow();
     error ContractIsPaused();
     error CantStakeThatMuch();
@@ -133,6 +135,7 @@ contract MetarixStaking_V1 is Ownable {
     function stake(uint256 poolId, uint256 amount) external {
         if(isPaused == true) revert ContractIsPaused();
         if(poolId >= pools.length) revert InvalidPoolId();
+        if(amount == 0) revert InvalidAmount();
         if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
         if(metarix.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
         if(metarix.transferFrom(msg.sender, address(this), amount) == false) revert InvalidErc20Transfer();
@@ -169,6 +172,8 @@ contract MetarixStaking_V1 is Ownable {
     /// @param depositId From which deposit the user want to unstake
     function unstake(uint256 depositId) external {
         if(isPaused == true) revert ContractIsPaused();
+        if(depositId >= deposits.length) revert InvalidDeposit();
+
         Deposit memory myDeposit = deposits[depositId];
 
         address _depositOwner = myDeposit.owner;
@@ -198,7 +203,7 @@ contract MetarixStaking_V1 is Ownable {
         // Increase the APR by aprFactor% for each new staker
         pools[_poolId].apr += aprFactor;
         pools[_poolId].totalStakers--;
-       totalStakedByPool[_poolId] -= _amount;
+        totalStakedByPool[_poolId] -= _amount;
 
         emit Unstake(msg.sender, _poolId, depositId, _totalAmount);
     }
@@ -206,6 +211,8 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Function for emergency withdraw
     function emergencyWithdraw(uint256 depositId) external {
         if(isPaused == true) revert ContractIsPaused();
+        if(depositId >= deposits.length) revert InvalidDeposit();
+
         Deposit memory myDeposit = deposits[depositId];
 
         address _depositOwner = myDeposit.owner;
@@ -239,6 +246,8 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Function to compound the pending rewards
     function compound(uint256 depositId) external {
         if(isPaused == true) revert ContractIsPaused();
+        if(depositId >= deposits.length) revert InvalidDeposit();
+        
         Deposit memory myDeposit = deposits[depositId];
         
         address _depositOwner = myDeposit.owner;
