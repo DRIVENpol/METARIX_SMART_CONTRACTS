@@ -73,6 +73,10 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Track last compound date
     mapping(address => uint256) public lastCompoundDate;
 
+    /// @dev Track the staked amount and rewards after the user withdraw
+    mapping(uint256 => uint256) public depositToStakedAmount;
+    mapping(uint256 => uint256) public depositToReceivedRewards;
+
     /// @dev Events
     event TogglePause(bool status);
     event NewAprFactor(uint256 apr);
@@ -205,6 +209,10 @@ contract MetarixStaking_V1 is Ownable {
         pools[_poolId].totalStakers--;
         totalStakedByPool[_poolId] -= _amount;
 
+        // Set the data for UI
+        depositToStakedAmount[depositId] = _amount;
+        depositToReceivedRewards[depositId] = _pending;
+
         emit Unstake(msg.sender, _poolId, depositId, _totalAmount);
     }
 
@@ -239,6 +247,10 @@ contract MetarixStaking_V1 is Ownable {
         pools[_poolId].apr += aprFactor;
         pools[_poolId].totalStakers--;
         totalStakedByPool[_poolId] -= _totalAmount;
+
+        // Set the data for UI
+        depositToStakedAmount[depositId] = _amount;
+        depositToReceivedRewards[depositId] = 0;
 
         emit EmergencyWithdraw(msg.sender, _poolId, depositId, _totalAmount);
     }
@@ -490,8 +502,8 @@ contract MetarixStaking_V1 is Ownable {
     }
 
     /// @dev Function to fetch the staked amount for each deposit
-    function fetchTotalStakedByPool(uint256 id) public view returns(uint256) {
-           return totalStakedByPool[id];
+    function fetchTotalStakedByPool(uint256 depositId) public view returns(uint256) {
+           return totalStakedByPool[depositId];
     }
 
     /// @dev Fetch the length of pools
@@ -502,5 +514,10 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Fetch the length of deposits
     function fetchDepositsLength() public view returns(uint256) {
         return deposits.length;
+    }
+
+    /// @dev Fetch the staked amount and the received rewards after withdraw
+    function getStakedAndRewards(uint256 depositId) public view returns(uint256, uint256) {
+        return(depositToStakedAmount[depositId], depositToReceivedRewards[depositId]);
     }
 }
