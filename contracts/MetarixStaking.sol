@@ -100,6 +100,7 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
     event EmergencyWithdraw(address indexed user, uint256 poolId, uint256 depositId, uint256 amount);
 
     /// @dev Errors
+    error NotEoa();
     error CantCompound();
     error InvalidOwner();
     error EndedDeposit();
@@ -134,18 +135,24 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
         isPaused = false;
     }
 
+    /// Modifier
+    modifier isContract() {
+        if(msg.sender != tx.origin) revert NotEoa();
+        _;
+    }
+
     /// @dev Funciton to stake tokens
     /// @param poolId In which pool the user want to stake
     /// @param amount How many tokens the user want to stake
-    function stake(uint256 poolId, uint256 amount) external nonReentrant {
+    function stake(uint256 poolId, uint256 amount) external nonReentrant isContract {
         if(isPaused == true) revert ContractIsPaused();
-        if(poolId >= pools.length) revert InvalidPoolId();
+        if(pools.length == 0 && poolId >= pools.length - 1) revert InvalidPoolId();
         if(amount == 0) revert InvalidAmount();
         if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
         if(metarix.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
-        if(metarix.transferFrom(msg.sender, address(this), amount) == false) revert InvalidErc20Transfer();
+        if(metarix.transferFrom(msg.sender, address(this), amount) != true) revert InvalidErc20Transfer();
         
-        Pool memory pool = pools[poolId];
+        Pool storage pool = pools[poolId];
 
         if(pool.enabled == false) revert PoolDisabled();
 
@@ -164,20 +171,20 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
         userDeposits[msg.sender].push(deposits.length);
         deposits.push(newDeposit);
 
-        pools[poolId].totalStakers++;
+        pool.totalStakers++;
         totalStakedByPool[poolId] += amount;
 
         // Decrease the APR by aprFactor% for each new staker
-        pools[poolId].apr -= aprFactor;
+        pool.apr -= aprFactor;
 
         emit Stake(msg.sender, poolId, amount);
     }
 
     /// @dev Function to unstake
     /// @param depositId From which deposit the user want to unstake
-    function unstake(uint256 depositId) external nonReentrant {
+    function unstake(uint256 depositId) external nonReentrant isContract {
         if(isPaused == true) revert ContractIsPaused();
-        if(depositId >= deposits.length) revert InvalidDeposit();
+        if(deposits.length == 0 && depositId >= deposits.length - 1) revert InvalidDeposit();
 
         Deposit storage myDeposit = deposits[depositId];
 
@@ -204,8 +211,8 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
         // Send rewards
         uint256 _totalAmount = _amount + _pending;
         
-        if(metarix.approve(_depositOwner, _totalAmount) == false) revert FailedToGiveAllowance();
-        if(metarix.transfer(_depositOwner, _totalAmount) == false) revert InvalidErc20Transfer();
+        if(metarix.approve(_depositOwner, _totalAmount) != true) revert FailedToGiveAllowance();
+        if(metarix.transfer(_depositOwner, _totalAmount) != true) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
         myPool.apr += aprFactor;
@@ -220,9 +227,9 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
     }
 
     /// @dev Function for emergency withdraw
-    function emergencyWithdraw(uint256 depositId) external nonReentrant {
+    function emergencyWithdraw(uint256 depositId) external nonReentrant isContract {
         if(isPaused == true) revert ContractIsPaused();
-        if(depositId >= deposits.length) revert InvalidDeposit();
+        if(deposits.length == 0 && depositId >= deposits.length - 1) revert InvalidDeposit();
 
         Deposit storage myDeposit = deposits[depositId];
 
@@ -245,8 +252,8 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
         uint256 _takenFee = _amount * fee / 100;
         uint256 _totalAmount = _amount  - _takenFee;
         
-        if(metarix.approve(_depositOwner, _totalAmount) == false) revert FailedToGiveAllowance();
-        if(metarix.transfer(myDeposit.owner, _totalAmount) == false) revert InvalidErc20Transfer();
+        if(metarix.approve(_depositOwner, _totalAmount) != true) revert FailedToGiveAllowance();
+        if(metarix.transfer(myDeposit.owner, _totalAmount) != true) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
         myPool.apr += aprFactor;
@@ -261,9 +268,9 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
     }
 
     /// @dev Function to compound the pending rewards
-    function compound(uint256 depositId) external nonReentrant {
+    function compound(uint256 depositId) external nonReentrant isContract {
         if(isPaused == true) revert ContractIsPaused();
-        if(depositId >= deposits.length) revert InvalidDeposit();
+        if(deposits.length == 0 && depositId >= deposits.length - 1) revert InvalidDeposit();
         
         Deposit storage myDeposit = deposits[depositId];
         
@@ -441,7 +448,7 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
             uint256 _amount = deposits[i].amount;
             address _owner = deposits[i].owner;
             deposits[i].amount = 0;
-            if(metarix.transfer(_owner, _amount) == false) revert InvalidErc20Transfer();
+            if(metarix.transfer(_owner, _amount) != true) revert InvalidErc20Transfer();
 
             emit SendTokensBack(_owner, _amount);
         }
