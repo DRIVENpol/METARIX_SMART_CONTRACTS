@@ -3,6 +3,7 @@
 pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 interface IToken {
     function balanceOf(address account) external view returns (uint256);
@@ -18,7 +19,7 @@ interface IToken {
  * @author Socarde Paul-Constantin, DRIVENlabs Inc.
  */
 
-contract MetarixStaking_V1 is Ownable {
+contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
 
     /// @dev Metarix Token
     IToken public metarix;
@@ -136,7 +137,7 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Funciton to stake tokens
     /// @param poolId In which pool the user want to stake
     /// @param amount How many tokens the user want to stake
-    function stake(uint256 poolId, uint256 amount) external {
+    function stake(uint256 poolId, uint256 amount) external nonReentrant {
         if(isPaused == true) revert ContractIsPaused();
         if(poolId >= pools.length) revert InvalidPoolId();
         if(amount == 0) revert InvalidAmount();
@@ -174,11 +175,11 @@ contract MetarixStaking_V1 is Ownable {
 
     /// @dev Function to unstake
     /// @param depositId From which deposit the user want to unstake
-    function unstake(uint256 depositId) external {
+    function unstake(uint256 depositId) external nonReentrant {
         if(isPaused == true) revert ContractIsPaused();
         if(depositId >= deposits.length) revert InvalidDeposit();
 
-        Deposit memory myDeposit = deposits[depositId];
+        Deposit storage myDeposit = deposits[depositId];
 
         address _depositOwner = myDeposit.owner;
         uint256 _endDate = myDeposit.endDate;
@@ -190,10 +191,12 @@ contract MetarixStaking_V1 is Ownable {
         uint256 _amount = myDeposit.amount;
         uint256 _poolId = myDeposit.poolId;
 
-        if(pools[_poolId].enabled == false) revert PoolDisabled();
+        Pool storage myPool = pools[_poolId];
 
-        deposits[depositId].amount = 0;
-        deposits[depositId].ended = true;
+        if(myPool.enabled == false) revert PoolDisabled();
+
+        myDeposit.amount = 0;
+        myDeposit.ended = true;
 
         // Compute rewards
         uint256 _pending = computePendingRewards(_depositOwner, _poolId, depositId, _amount);
@@ -205,8 +208,8 @@ contract MetarixStaking_V1 is Ownable {
         if(metarix.transfer(_depositOwner, _totalAmount) == false) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
-        pools[_poolId].apr += aprFactor;
-        pools[_poolId].totalStakers--;
+        myPool.apr += aprFactor;
+        myPool.totalStakers--;
         totalStakedByPool[_poolId] -= _amount;
 
         // Set the data for UI
@@ -217,11 +220,11 @@ contract MetarixStaking_V1 is Ownable {
     }
 
     /// @dev Function for emergency withdraw
-    function emergencyWithdraw(uint256 depositId) external {
+    function emergencyWithdraw(uint256 depositId) external nonReentrant {
         if(isPaused == true) revert ContractIsPaused();
         if(depositId >= deposits.length) revert InvalidDeposit();
 
-        Deposit memory myDeposit = deposits[depositId];
+        Deposit storage myDeposit = deposits[depositId];
 
         address _depositOwner = myDeposit.owner;
 
@@ -231,10 +234,12 @@ contract MetarixStaking_V1 is Ownable {
         uint256 _amount = myDeposit.amount;
         uint256 _poolId = myDeposit.poolId;
 
+        Pool storage myPool = pools[_poolId];
+
         if(pools[_poolId].enabled == false) revert PoolDisabled();
 
-        deposits[depositId].amount = 0;
-        deposits[depositId].ended = true;
+        myDeposit.amount = 0;
+        myDeposit.ended = true;
 
         // Substract the fee and send the amount
         uint256 _takenFee = _amount * fee / 100;
@@ -244,8 +249,8 @@ contract MetarixStaking_V1 is Ownable {
         if(metarix.transfer(myDeposit.owner, _totalAmount) == false) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
-        pools[_poolId].apr += aprFactor;
-        pools[_poolId].totalStakers--;
+        myPool.apr += aprFactor;
+        myPool.totalStakers--;
         totalStakedByPool[_poolId] -= _totalAmount;
 
         // Set the data for UI
@@ -256,11 +261,11 @@ contract MetarixStaking_V1 is Ownable {
     }
 
     /// @dev Function to compound the pending rewards
-    function compound(uint256 depositId) external {
+    function compound(uint256 depositId) external nonReentrant {
         if(isPaused == true) revert ContractIsPaused();
         if(depositId >= deposits.length) revert InvalidDeposit();
         
-        Deposit memory myDeposit = deposits[depositId];
+        Deposit storage myDeposit = deposits[depositId];
         
         address _depositOwner = myDeposit.owner;
         uint256 _endDate = myDeposit.endDate;
@@ -281,8 +286,8 @@ contract MetarixStaking_V1 is Ownable {
         uint256 _pending = computePendingRewards(_depositOwner, _poolId, depositId, _amount);
 
         // Compound
-        deposits[depositId].amount += _pending;
-        deposits[depositId].compounded += _pending;
+        myDeposit.amount += _pending;
+        myDeposit.compounded += _pending;
 
         emit Compound(msg.sender, _poolId, depositId, _pending);
     }
