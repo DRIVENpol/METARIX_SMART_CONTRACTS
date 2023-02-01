@@ -3,7 +3,6 @@
 pragma solidity 0.8.17;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 
 interface IToken {
     function balanceOf(address account) external view returns (uint256);
@@ -19,10 +18,13 @@ interface IToken {
  * @author Socarde Paul-Constantin, DRIVENlabs Inc.
  */
 
-contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
+contract MetarixStaking_V1 is Ownable {
 
     /// @dev Metarix Token
     IToken public metarix;
+
+    /// @dev for re-entrancy protection
+    uint256 private enter = 1;
 
     /// @dev Variable to increase/decrease the APR
     uint256 public aprFactor;
@@ -104,6 +106,7 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
 
     /// @dev Errors
     error NotEoa();
+    error CantEnter();
     error CantCompound();
     error InvalidOwner();
     error EndedDeposit();
@@ -142,6 +145,13 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
     modifier isContract() {
         if(msg.sender != tx.origin) revert NotEoa();
         _;
+    }
+
+    modifier nonReentrant() {
+        if(enter != 1) revert CantEnter();
+        enter = 2;
+        _;
+        enter = 1;
     }
 
     /// @dev Funciton to stake tokens
