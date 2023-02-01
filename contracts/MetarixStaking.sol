@@ -78,6 +78,9 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
     mapping(uint256 => uint256) public depositToStakedAmount;
     mapping(uint256 => uint256) public depositToReceivedRewards;
 
+    /// @dev Track if a user used emergency withdraw for deposit[index]
+    mapping(address => mapping(uint256 => bool)) public usedEmergency;
+
     /// @dev Events
     event TogglePause(bool status);
     event NewAprFactor(uint256 apr);
@@ -263,6 +266,9 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
         // Set the data for UI
         depositToStakedAmount[depositId] = _amount;
         depositToReceivedRewards[depositId] = 0;
+
+        // Used emergency withdraw
+        usedEmergency[msg.sender][depositId] = true;
 
         emit EmergencyWithdraw(msg.sender, _poolId, depositId, _totalAmount);
     }
@@ -495,8 +501,8 @@ contract MetarixStaking_V1 is Ownable, ReentrancyGuard {
     }
 
     /// @dev Function to fetch deposit details
-    function fetchDepositDetails(uint256 depositId) public view returns(Deposit memory){
-        return deposits[depositId];
+    function fetchDepositDetails(uint256 depositId) public view returns(Deposit memory, bool){
+        return (deposits[depositId], usedEmergency[deposits[depositId].owner][depositId]);
     }
 
     /// @dev Function to fethc pool details
