@@ -2,8 +2,6 @@
 
 pragma solidity 0.8.17;
 
-import "@openzeppelin/contracts/access/Ownable.sol";
-
 interface IToken {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address to, uint256 amount) external returns (bool);
@@ -14,14 +12,14 @@ interface IToken {
 
 /**
  * @title Staking Smart Contract
- * @notice Custom made smart contract to stake Metarix Token
+ * @notice On-request smart contract to stake Metarix Token
  * @author Socarde Paul-Constantin, DRIVENlabs Inc.
  */
 
-contract MetarixStaking_V1 is Ownable {
+contract MetarixStaking_V1 {
 
-    /// @dev Metarix Token
-    IToken public metarix;
+    /// @dev Tokens for rewards
+    uint256 public registeredRewards;
 
     /// @dev for re-entrancy protection
     uint256 private enter = 1;
@@ -36,11 +34,33 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Compound period
     uint256 compoundPeriod;
 
-    /// @dev Analytics
-    mapping(uint256 => uint256) public totalStakedByPool;
+    /// @dev The admin
+    address public admin;
 
     /// @dev Pause the smart contract
     bool public isPaused;
+
+    /// @dev Analytics
+    mapping(uint256 => uint256) public totalStakedByPool;
+
+    /// @dev Link an address to deposit with id
+    mapping(address => uint256[]) public userDeposits;
+
+    /// @dev Add increased APR for certain users
+    mapping(address => bool) public hasIncreasedApr;
+
+    /// @dev Track last compound date
+    mapping(address => uint256) public lastCompoundDate;
+
+    /// @dev Track the staked amount and rewards after the user withdraw
+    mapping(uint256 => uint256) public depositToStakedAmount;
+    mapping(uint256 => uint256) public depositToReceivedRewards;
+
+    /// @dev Track if a user used emergency withdraw for deposit[index]
+    mapping(address => mapping(uint256 => bool)) public usedEmergency;
+
+    /// @dev Metarix Token
+    IToken public metarix;
 
     /// @dev Struct for pools
     struct Pool {
@@ -67,31 +87,16 @@ contract MetarixStaking_V1 is Ownable {
     Pool[] public pools;
     Deposit[] public deposits;
 
-    /// @dev Link an address to deposit with id
-    mapping(address => uint256[]) public userDeposits;
-
-    /// @dev Add increased APR for certain users
-    mapping(address => bool) public hasIncreasedApr;
-
-    /// @dev Track last compound date
-    mapping(address => uint256) public lastCompoundDate;
-
-    /// @dev Track the staked amount and rewards after the user withdraw
-    mapping(uint256 => uint256) public depositToStakedAmount;
-    mapping(uint256 => uint256) public depositToReceivedRewards;
-
-    /// @dev Track if a user used emergency withdraw for deposit[index]
-    mapping(address => mapping(uint256 => bool)) public usedEmergency;
 
     /// @dev Events
     event TogglePause(bool status);
     event NewAprFactor(uint256 apr);
     event RescueBNB(uint256 amount);
     event NewEmergencyFee(uint256 fee);
-    event NewTokenAddress(address token);
     event NewCompoundPeriod(uint256 period);
     event NewAprFactorForUsers(uint256 apr);
     event AddPool(uint256 apr, uint256 period);
+    event NewTokenAddress(address indexed token);
     event NewApr(uint256 poolId, uint256 newApr);
     event EnablePool(uint256 poolId, bool status);
     event DisablePool(uint256 poolId, bool status);
@@ -106,7 +111,9 @@ contract MetarixStaking_V1 is Ownable {
 
     /// @dev Errors
     error NotEoa();
+    error NotAdmin();
     error CantEnter();
+    error ZeroBalance();
     error CantCompound();
     error InvalidOwner();
     error EndedDeposit();
@@ -126,6 +133,7 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Constructor
     constructor(address _metarix) {
         metarix = IToken(_metarix);
+        admin = msg.sender;
         
         // Create pools
         pools.push(Pool(0, 1000, 30, 0, true));
@@ -142,28 +150,36 @@ contract MetarixStaking_V1 is Ownable {
     }
 
     /// Modifier
-    modifier isContract() {
-        if(msg.sender != tx.origin) revert NotEoa();
+    modifier nonReentrant() {
+        _nonReentrantBefore();
+        _;
+        _nonReentrantAfter();
+    }
+
+    modifier onlyOwner() {
+        _onlyOwner();
         _;
     }
 
-    modifier nonReentrant() {
+    /// @dev Internal functions to save gas on modifier
+    function _onlyOwner() internal view {
+        if(msg.sender != admin) revert NotAdmin();
+    }
+
+    function _nonReentrantBefore() internal {
         if(enter != 1) revert CantEnter();
         enter = 2;
-        _;
+    }
+
+    function _nonReentrantAfter() internal {
         enter = 1;
     }
 
     /// @dev Funciton to stake tokens
     /// @param poolId In which pool the user want to stake
     /// @param amount How many tokens the user want to stake
-    function stake(uint256 poolId, uint256 amount) external nonReentrant isContract {
-        if(isPaused == true) revert ContractIsPaused();
-        if(pools.length == 0 && poolId >= pools.length - 1) revert InvalidPoolId();
-        if(amount == 0) revert InvalidAmount();
-        if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
-        if(metarix.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
-        if(metarix.transferFrom(msg.sender, address(this), amount) != true) revert InvalidErc20Transfer();
+    function stake(uint256 poolId, uint256 amount) external payable nonReentrant {
+        _initActionsStaking(poolId, amount);
         
         Pool storage pool = pools[poolId];
 
@@ -184,7 +200,8 @@ contract MetarixStaking_V1 is Ownable {
         userDeposits[msg.sender].push(deposits.length);
         deposits.push(newDeposit);
 
-        pool.totalStakers++;
+        unchecked {++pool.totalStakers;}
+
         totalStakedByPool[poolId] += amount;
 
         // Decrease the APR by aprFactor% for each new staker
@@ -192,12 +209,11 @@ contract MetarixStaking_V1 is Ownable {
 
         emit Stake(msg.sender, poolId, amount);
     }
-
+    
     /// @dev Function to unstake
     /// @param depositId From which deposit the user want to unstake
-    function unstake(uint256 depositId) external nonReentrant isContract {
-        if(isPaused == true) revert ContractIsPaused();
-        if(deposits.length == 0 && depositId >= deposits.length - 1) revert InvalidDeposit();
+    function unstake(uint256 depositId) external payable nonReentrant {
+        _initChecks(depositId);
 
         Deposit storage myDeposit = deposits[depositId];
 
@@ -220,6 +236,9 @@ contract MetarixStaking_V1 is Ownable {
 
         // Compute rewards
         uint256 _pending = computePendingRewards(_depositOwner, _poolId, depositId, _amount);
+        if(registeredRewards - _pending > 0) {
+            registeredRewards -= _pending;
+        } else revert ZeroBalance();
 
         // Send rewards
         uint256 _totalAmount = _amount + _pending;
@@ -229,20 +248,20 @@ contract MetarixStaking_V1 is Ownable {
 
         // Increase the APR by aprFactor% for each new staker
         myPool.apr += aprFactor;
-        myPool.totalStakers--;
+        --myPool.totalStakers;
         totalStakedByPool[_poolId] -= _amount;
 
         // Set the data for UI
         depositToStakedAmount[depositId] = _amount;
         depositToReceivedRewards[depositId] = _pending;
+        
 
         emit Unstake(msg.sender, _poolId, depositId, _totalAmount);
     }
 
     /// @dev Function for emergency withdraw
-    function emergencyWithdraw(uint256 depositId) external nonReentrant isContract {
-        if(isPaused == true) revert ContractIsPaused();
-        if(deposits.length == 0 && depositId >= deposits.length - 1) revert InvalidDeposit();
+    function emergencyWithdraw(uint256 depositId) external payable nonReentrant {
+        _initChecks(depositId);
 
         Deposit storage myDeposit = deposits[depositId];
 
@@ -270,7 +289,7 @@ contract MetarixStaking_V1 is Ownable {
 
         // Increase the APR by aprFactor% for each new staker
         myPool.apr += aprFactor;
-        myPool.totalStakers--;
+        --myPool.totalStakers;
         totalStakedByPool[_poolId] -= _totalAmount;
 
         // Set the data for UI
@@ -284,9 +303,8 @@ contract MetarixStaking_V1 is Ownable {
     }
 
     /// @dev Function to compound the pending rewards
-    function compound(uint256 depositId) external nonReentrant isContract {
-        if(isPaused == true) revert ContractIsPaused();
-        if(deposits.length == 0 && depositId >= deposits.length - 1) revert InvalidDeposit();
+    function compound(uint256 depositId) external payable nonReentrant {
+        _initChecks(depositId);
         
         Deposit storage myDeposit = deposits[depositId];
         
@@ -308,11 +326,32 @@ contract MetarixStaking_V1 is Ownable {
         // Compute rewards
         uint256 _pending = computePendingRewards(_depositOwner, _poolId, depositId, _amount);
 
+        registeredRewards -= _pending;
+
         // Compound
         myDeposit.amount += _pending;
         myDeposit.compounded += _pending;
 
         emit Compound(msg.sender, _poolId, depositId, _pending);
+    }
+
+    /// @dev Internal function to do the initial checks on staking function
+    function _initActionsStaking(uint256 poolId, uint256 amount) internal {
+        if(isPaused == true) revert ContractIsPaused();
+        if(pools.length == 0) revert InvalidPoolId();
+        if(poolId >= pools.length - 1) revert InvalidPoolId();
+        if(amount == 0) revert InvalidAmount();
+        if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
+        if(metarix.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
+        if(metarix.transferFrom(msg.sender, address(this), amount) != true) revert InvalidErc20Transfer();
+    }
+
+    /// @dev Internal function to check the smart contract's state
+    ///      on the "unstake", "emergencyWithdraw" & "compund" functions
+    function _initChecks(uint256 depositId) internal view{
+        if(isPaused == true) revert ContractIsPaused();
+        if(deposits.length == 0) revert InvalidDeposit();
+        if(depositId >= deposits.length - 1) revert InvalidDeposit();
     }
 
     /// @dev Function to compute pending rewards
@@ -394,11 +433,12 @@ contract MetarixStaking_V1 is Ownable {
 
     /// @dev Funciton to set users with increased apr
     function setIncreasedAprForUsers(address[] calldata users) external onlyOwner {
-        for(uint256 i=0; i< users.length; i++) {
+        for(uint256 i=0; i< users.length;) {
             address _user = users[i];
             hasIncreasedApr[_user] = true;
 
             emit SetIncreasedAprFor(_user, true);
+            unchecked { ++i; }
         }
     }
 
@@ -411,11 +451,12 @@ contract MetarixStaking_V1 is Ownable {
 
     /// @dev Funciton to set users with normal apr again
     function setNormalAprForUsers(address[] calldata users) external onlyOwner {
-        for(uint256 i=0; i< users.length; i++) {
+        for(uint256 i=0; i< users.length;) {
             address _user = users[i];
             hasIncreasedApr[_user] = false;
 
             emit SetNormalAprFor(_user, false);
+            unchecked { ++i; }
         }
     }
 
@@ -428,10 +469,11 @@ contract MetarixStaking_V1 is Ownable {
 
     /// @dev Function to disable all pools
     function disableAllPools() external onlyOwner {
-        for(uint256 i=0; i< pools.length; i++) {
+        for(uint256 i=0; i< pools.length;) {
             pools[i].enabled = false;
 
             emit DisablePool(i, false);
+            unchecked { ++i; }
         }
     }
 
@@ -444,10 +486,11 @@ contract MetarixStaking_V1 is Ownable {
 
     /// @dev Function to disable all pools
     function enableAllPools() external onlyOwner {
-        for(uint256 i=0; i< pools.length; i++) {
+        for(uint256 i=0; i< pools.length;) {
             pools[i].enabled = true;
 
             emit EnablePool(i, true);
+            unchecked { ++i; }
         }
     }
 
@@ -460,13 +503,14 @@ contract MetarixStaking_V1 is Ownable {
 
     /// @dev Function to send the staked tokens back to users
     function sendTokensBack() external onlyOwner {
-        for(uint256 i=0; i< deposits.length; i++) {
+        for(uint256 i = 0; i < deposits.length;) {
             uint256 _amount = deposits[i].amount;
             address _owner = deposits[i].owner;
             deposits[i].amount = 0;
             if(metarix.transfer(_owner, _amount) != true) revert InvalidErc20Transfer();
 
             emit SendTokensBack(_owner, _amount);
+            unchecked { ++i; }
         }
     }
 
@@ -478,6 +522,15 @@ contract MetarixStaking_V1 is Ownable {
         emit AddPool(apr, period);
     }
 
+    /// @dev Function to register the tokens allocated for rewards
+    ///      To be called after tokens set for reward are sent to
+    ///      this smart contract
+    function registerTokensForRewards() external onlyOwner {
+        uint256 _balance = metarix.balanceOf(address(this));
+        if(_balance == 0) revert ZeroBalance();
+        registeredRewards = _balance;
+    }
+
     /// @dev Change the Metarix address in case of migration
     function changeMetarixAddress(address newToken) external onlyOwner {
         if(newToken == address(metarix)) revert AddressAlreadyInUse();
@@ -487,19 +540,27 @@ contract MetarixStaking_V1 is Ownable {
     }
 
     /// @dev Function to withdraw tokens from the smart contract
+    ///      If the address == metarix, the owner will withdraw the
+    ///      rewards only - the user's funds can't be withdrawn
     function withdrawErc20Tokens(address token) external onlyOwner {
-        uint256 _balance = IToken(token).balanceOf(address(this));
-        if(IToken(token).transfer(owner(), _balance) == false) revert InvalidErc20Transfer();
+        uint256 _balance;
+
+        if(token == address(metarix)) {
+            _balance = registeredRewards;
+        } else {
+            _balance = IToken(token).balanceOf(address(this));
+        }
+
+        if(IToken(token).transfer(admin, _balance) == false) revert InvalidErc20Transfer();
 
         emit WithdrawErc20Tokens(token, _balance);
     }
 
     /// @dev Function to rescue BNB
     function rescueBnb() external onlyOwner {
-        address _to = owner();
         uint256 _amount = address(this).balance;
 
-        (bool sent, ) = _to.call{value: _amount}("");
+        (bool sent, ) = admin.call{value: _amount}("");
         if(sent == false) revert FailedEthTransfer();
 
         emit RescueBNB(_amount);
@@ -523,8 +584,9 @@ contract MetarixStaking_V1 is Ownable {
     /// @dev Funciton to fetch total staked tokens across all pools
     function fetchAllStakedTokens() public view returns(uint256) {
         uint256 totalStaked;
-        for(uint256 i=0; i < pools.length; i++) {
+        for(uint256 i=0; i < pools.length;) {
             totalStaked += totalStakedByPool[i];
+            unchecked { ++i; }
         }
         return totalStaked;
     }
