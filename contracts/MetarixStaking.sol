@@ -32,7 +32,7 @@ contract MetarixStaking_V1 {
     uint256 public fee;
 
     /// @dev Compound period
-    uint256 compoundPeriod;
+    uint256 public compoundPeriod;
 
     /// @dev The admin
     address public admin;
