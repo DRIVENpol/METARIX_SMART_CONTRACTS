@@ -32,7 +32,7 @@ contract MetarixStaking_V1 {
     uint256 public fee;
 
     /// @dev Compound period
-    uint256 public compoundPeriod;
+    uint256 compoundPeriod;
 
     /// @dev The admin
     address public admin;
@@ -124,6 +124,7 @@ contract MetarixStaking_V1 {
     error CantUnstakeNow();
     error ContractIsPaused();
     error CantStakeThatMuch();
+    error InvalidParameters();
     error FailedEthTransfer();
     error NotEnoughAllowance();
     error AddressAlreadyInUse();
@@ -180,32 +181,8 @@ contract MetarixStaking_V1 {
     /// @param amount How many tokens the user want to stake
     function stake(uint256 poolId, uint256 amount) external payable nonReentrant {
         _initActionsStaking(poolId, amount);
-        
-        Pool storage pool = pools[poolId];
 
-        if(pool.enabled == false) revert PoolDisabled();
-
-        uint256 _period = pool.periodInDays * 1 days;
-
-        Deposit memory newDeposit = Deposit(
-        deposits.length,
-        poolId, 
-        amount,
-        0,
-        block.timestamp,
-        block.timestamp + _period,
-        msg.sender,
-        false);
-
-        userDeposits[msg.sender].push(deposits.length);
-        deposits.push(newDeposit);
-
-        unchecked {++pool.totalStakers;}
-
-        totalStakedByPool[poolId] += amount;
-
-        // Decrease the APR by aprFactor% for each new staker
-        pool.apr -= aprFactor;
+        _addDeposit(msg.sender, poolId, amount);
 
         emit Stake(msg.sender, poolId, amount);
     }
@@ -335,6 +312,61 @@ contract MetarixStaking_V1 {
         emit Compound(msg.sender, _poolId, depositId, _pending);
     }
 
+    /// @dev Function for owner to migrate users from the old smart contract
+    function migrate(address[] calldata users, uint256[] calldata amounts, uint256[] calldata poolIds) external onlyOwner {
+        if(users.length != amounts.length && users.length != poolIds.length) revert InvalidParameters();
+        if(users.length > 100) revert InvalidParameters();
+        
+        uint256 _totalAmount;
+
+        for(uint256 i = 0; i < amounts.length;) {
+            unchecked {
+                _totalAmount += amounts[i];
+                ++i;
+            }
+        }
+
+        if(metarix.allowance(msg.sender, address(this)) < _totalAmount) revert NotEnoughAllowance();
+        if(metarix.transferFrom(msg.sender, address(this), _totalAmount) != true) revert InvalidErc20Transfer();
+
+        for(uint256 i = 0; i < users.length;) {
+            _addDeposit(users[i], amounts[i], poolIds[i]);
+
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    /// @dev Internal function to add a new deposit
+    function _addDeposit(address user, uint256 poolId, uint256 amount) internal {
+        Pool storage pool = pools[poolId];
+
+        if(pool.enabled == false) revert PoolDisabled();
+        uint256 _period = pool.periodInDays * 1 days;
+
+
+        Deposit memory newDeposit = Deposit(
+        deposits.length,
+        poolId, 
+        amount,
+        0,
+        block.timestamp,
+        block.timestamp + _period,
+        user,
+        false);
+
+        userDeposits[user].push(deposits.length);
+        deposits.push(newDeposit);
+
+        // Analytics
+        unchecked {++pool.totalStakers;}
+
+        totalStakedByPool[poolId] += amount;
+
+        pool.apr -= aprFactor;
+    }
+
     /// @dev Internal function to do the initial checks on staking function
     function _initActionsStaking(uint256 poolId, uint256 amount) internal {
         if(isPaused == true) revert ContractIsPaused();
@@ -353,6 +385,7 @@ contract MetarixStaking_V1 {
         if(deposits.length == 0) revert InvalidDeposit();
         if(depositId >= deposits.length - 1) revert InvalidDeposit();
     }
+
 
     /// @dev Function to compute pending rewards
     /// @return _pendingRewards Return pending rewards
