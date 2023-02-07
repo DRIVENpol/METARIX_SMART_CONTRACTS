@@ -110,7 +110,6 @@ contract MetarixStaking_V1 {
     event EmergencyWithdraw(address indexed user, uint256 poolId, uint256 depositId, uint256 amount);
 
     /// @dev Errors
-    error NotEoa();
     error NotAdmin();
     error CantEnter();
     error ZeroBalance();
