@@ -123,6 +123,7 @@ contract MetarixStaking_V1 {
     error InvalidDeposit();
     error CantUnstakeNow();
     error ContractIsPaused();
+    error InvalidOperation();
     error CantStakeThatMuch();
     error InvalidParameters();
     error FailedEthTransfer();
@@ -313,7 +314,7 @@ contract MetarixStaking_V1 {
     }
 
     /// @dev Function for owner to migrate users from the old smart contract
-    function migrate(address[] calldata users, uint256[] calldata amounts, uint256[] calldata poolIds) external onlyOwner {
+    function migrate(address[] calldata users, uint256[] calldata amounts, uint256[] calldata poolIds, bool[] calldata isBoosted) external onlyOwner {
         if(users.length != amounts.length && users.length != poolIds.length) revert InvalidParameters();
         if(users.length > 100) revert InvalidParameters();
         
@@ -332,101 +333,12 @@ contract MetarixStaking_V1 {
         for(uint256 i = 0; i < users.length;) {
             _addDeposit(users[i], amounts[i], poolIds[i]);
 
+            if(isBoosted[i] == true) _setAprForUser(users[i], true);
+
             unchecked {
                 ++i;
             }
         }
-    }
-
-    /// @dev Internal function to add a new deposit
-    function _addDeposit(address user, uint256 poolId, uint256 amount) internal {
-        Pool storage pool = pools[poolId];
-
-        if(pool.enabled == false) revert PoolDisabled();
-        uint256 _period = pool.periodInDays * 1 days;
-
-
-        Deposit memory newDeposit = Deposit(
-        deposits.length,
-        poolId, 
-        amount,
-        0,
-        block.timestamp,
-        block.timestamp + _period,
-        user,
-        false);
-
-        userDeposits[user].push(deposits.length);
-        deposits.push(newDeposit);
-
-        // Analytics
-        unchecked {++pool.totalStakers;}
-
-        totalStakedByPool[poolId] += amount;
-
-        pool.apr -= aprFactor;
-    }
-
-    /// @dev Internal function to do the initial checks on staking function
-    function _initActionsStaking(uint256 poolId, uint256 amount) internal {
-        if(isPaused == true) revert ContractIsPaused();
-        if(pools.length == 0) revert InvalidPoolId();
-        if(poolId >= pools.length - 1) revert InvalidPoolId();
-        if(amount == 0) revert InvalidAmount();
-        if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
-        if(metarix.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
-        if(metarix.transferFrom(msg.sender, address(this), amount) != true) revert InvalidErc20Transfer();
-    }
-
-    /// @dev Internal function to check the smart contract's state
-    ///      on the "unstake", "emergencyWithdraw" & "compund" functions
-    function _initChecks(uint256 depositId) internal view{
-        if(isPaused == true) revert ContractIsPaused();
-        if(deposits.length == 0) revert InvalidDeposit();
-        if(depositId >= deposits.length - 1) revert InvalidDeposit();
-    }
-
-
-    /// @dev Function to compute pending rewards
-    /// @return _pendingRewards Return pending rewards
-    function computePendingRewards(address user, uint256 poolId, uint256 depositId, uint256 amount) public view returns(uint256) {
-        Pool memory pool = pools[poolId];
-        Deposit memory deposit = deposits[depositId];
-
-        uint256 _apr = pool.apr;
-        uint256 _period = pool.periodInDays;
-        uint256 _compounded = deposit.compounded;
-
-        if(hasIncreasedApr[user] == true) {
-            _apr += aprFactorForUsers;
-        }
-
-        uint256 _rPerYear = (amount * _apr) / 100;
-        uint256 _rPerDay = _rPerYear / 365;
-        uint256 _rPerHour = _rPerDay / 24;
-        uint256 _rPerMinute = _rPerHour / 60;
-        uint256 _rPerSecond = _rPerMinute / 60;
-        uint256 _pendingRewards;
-
-        // If deposit not ended
-        if(block.timestamp < deposit.endDate) {
-            uint256 _delta = block.timestamp - deposit.startDate;
-            _pendingRewards = (_delta * _rPerSecond) - _compounded;
-        } else if(block.timestamp >= deposit.endDate) { // If deposit ended
-            _pendingRewards = _rPerDay * _period;
-        }
-        return _pendingRewards / 100;
-    }
-
-    /// @dev Pause the smart contract
-    function togglePause() external onlyOwner {
-        if(isPaused == true) {
-            isPaused = false;
-        } else {
-            isPaused = true;
-        }
-
-        emit TogglePause(isPaused);
     }
 
     /// @dev Function to change the apr factor
@@ -459,7 +371,7 @@ contract MetarixStaking_V1 {
 
     /// @dev Function to set user with increased apr
     function setIncreasedAprForUser(address user) external onlyOwner {
-        hasIncreasedApr[user] = true;
+            _setAprForUser(user, true);
 
         emit SetIncreasedAprFor(user, true);
     }
@@ -467,17 +379,18 @@ contract MetarixStaking_V1 {
     /// @dev Funciton to set users with increased apr
     function setIncreasedAprForUsers(address[] calldata users) external onlyOwner {
         for(uint256 i=0; i< users.length;) {
-            address _user = users[i];
-            hasIncreasedApr[_user] = true;
 
-            emit SetIncreasedAprFor(_user, true);
+            _setAprForUser(users[i], true);
+
+            emit SetIncreasedAprFor(users[i], true);
+
             unchecked { ++i; }
         }
     }
 
     /// @dev Function to set user with normal apr again
     function setNormalAprForUser(address user) external onlyOwner {
-        hasIncreasedApr[user] = false;
+        _setAprForUser(user, false);
 
         emit SetNormalAprFor(user, false);
     }
@@ -485,10 +398,10 @@ contract MetarixStaking_V1 {
     /// @dev Funciton to set users with normal apr again
     function setNormalAprForUsers(address[] calldata users) external onlyOwner {
         for(uint256 i=0; i< users.length;) {
-            address _user = users[i];
-            hasIncreasedApr[_user] = false;
 
-            emit SetNormalAprFor(_user, false);
+            _setAprForUser(users[i], true);
+
+            emit SetNormalAprFor(users[i], false);
             unchecked { ++i; }
         }
     }
@@ -642,5 +555,101 @@ contract MetarixStaking_V1 {
     /// @dev Fetch the staked amount and the received rewards after withdraw
     function getStakedAndRewards(uint256 depositId) public view returns(uint256, uint256) {
         return(depositToStakedAmount[depositId], depositToReceivedRewards[depositId]);
+    }
+
+    /// @dev Internal function to add a new deposit
+    function _addDeposit(address user, uint256 poolId, uint256 amount) internal {
+        Pool storage pool = pools[poolId];
+
+        if(pool.enabled == false) revert PoolDisabled();
+        uint256 _period = pool.periodInDays * 1 days;
+
+
+        Deposit memory newDeposit = Deposit(
+        deposits.length,
+        poolId, 
+        amount,
+        0,
+        block.timestamp,
+        block.timestamp + _period,
+        user,
+        false);
+
+        userDeposits[user].push(deposits.length);
+        deposits.push(newDeposit);
+
+        // Analytics
+        unchecked {++pool.totalStakers;}
+
+        totalStakedByPool[poolId] += amount;
+
+        pool.apr -= aprFactor;
+    }
+
+    /// @dev Internal function to do the initial checks on staking function
+    function _initActionsStaking(uint256 poolId, uint256 amount) internal {
+        if(isPaused == true) revert ContractIsPaused();
+        if(pools.length == 0) revert InvalidPoolId();
+        if(poolId >= pools.length - 1) revert InvalidPoolId();
+        if(amount == 0) revert InvalidAmount();
+        if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
+        if(metarix.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
+        if(metarix.transferFrom(msg.sender, address(this), amount) != true) revert InvalidErc20Transfer();
+    }
+
+    /// @dev Internal function to check the smart contract's state
+    ///      on the "unstake", "emergencyWithdraw" & "compund" functions
+    function _initChecks(uint256 depositId) internal view{
+        if(isPaused == true) revert ContractIsPaused();
+        if(deposits.length == 0) revert InvalidDeposit();
+        if(depositId >= deposits.length - 1) revert InvalidDeposit();
+    }
+
+    /// @dev Internal function to set the increased APR for users
+    function _setAprForUser(address user, bool isIncreased) internal {
+        if(hasIncreasedApr[user] == isIncreased) revert InvalidOperation();
+        hasIncreasedApr[user] = isIncreased;
+    }
+
+    /// @dev Function to compute pending rewards
+    /// @return _pendingRewards Return pending rewards
+    function computePendingRewards(address user, uint256 poolId, uint256 depositId, uint256 amount) public view returns(uint256) {
+        Pool memory pool = pools[poolId];
+        Deposit memory deposit = deposits[depositId];
+
+        uint256 _apr = pool.apr;
+        uint256 _period = pool.periodInDays;
+        uint256 _compounded = deposit.compounded;
+
+        if(hasIncreasedApr[user] == true) {
+            _apr += aprFactorForUsers;
+        }
+
+        uint256 _rPerYear = (amount * _apr) / 100;
+        uint256 _rPerDay = _rPerYear / 365;
+        uint256 _rPerHour = _rPerDay / 24;
+        uint256 _rPerMinute = _rPerHour / 60;
+        uint256 _rPerSecond = _rPerMinute / 60;
+        uint256 _pendingRewards;
+
+        // If deposit not ended
+        if(block.timestamp < deposit.endDate) {
+            uint256 _delta = block.timestamp - deposit.startDate;
+            _pendingRewards = (_delta * _rPerSecond) - _compounded;
+        } else if(block.timestamp >= deposit.endDate) { // If deposit ended
+            _pendingRewards = _rPerDay * _period;
+        }
+        return _pendingRewards / 100;
+    }
+
+    /// @dev Pause the smart contract
+    function togglePause() external onlyOwner {
+        if(isPaused == true) {
+            isPaused = false;
+        } else {
+            isPaused = true;
+        }
+
+        emit TogglePause(isPaused);
     }
 }
