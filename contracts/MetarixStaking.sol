@@ -476,6 +476,17 @@ contract MetarixStaking_V1 {
         registeredRewards = _balance;
     }
 
+    /// @dev Pause the smart contract
+    function togglePause() external onlyOwner {
+        if(isPaused == true) {
+            isPaused = false;
+        } else {
+            isPaused = true;
+        }
+
+        emit TogglePause(isPaused);
+    }
+
     /// @dev Change the Metarix address in case of migration
     function changeMetarixAddress(address newToken) external onlyOwner {
         if(newToken == address(metarix)) revert AddressAlreadyInUse();
@@ -639,16 +650,5 @@ contract MetarixStaking_V1 {
             _pendingRewards = _rPerDay * _period;
         }
         return _pendingRewards / 100;
-    }
-
-    /// @dev Pause the smart contract
-    function togglePause() external onlyOwner {
-        if(isPaused == true) {
-            isPaused = false;
-        } else {
-            isPaused = true;
-        }
-
-        emit TogglePause(isPaused);
     }
 }
