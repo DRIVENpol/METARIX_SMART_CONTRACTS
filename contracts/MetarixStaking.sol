@@ -2,6 +2,10 @@
 
 pragma solidity 0.8.17;
 
+import "./proxy/OwnableUpgradeable.sol";
+import "./proxy/Initializable.sol";
+import "./proxy/UUPSUpgradeable.sol";
+
 interface IToken {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address to, uint256 amount) external returns (bool);
@@ -16,7 +20,7 @@ interface IToken {
  * @author Socarde Paul-Constantin, DRIVENlabs Inc.
  */
 
-contract MetarixStaking_V1 {
+contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable {
 
     /// @dev Tokens for rewards
     uint256 public registeredRewards;
@@ -33,9 +37,6 @@ contract MetarixStaking_V1 {
 
     /// @dev Compound period
     uint256 compoundPeriod;
-
-    /// @dev The admin
-    address public admin;
 
     /// @dev Pause the smart contract
     bool public isPaused;
@@ -110,7 +111,6 @@ contract MetarixStaking_V1 {
     event EmergencyWithdraw(address indexed user, uint256 poolId, uint256 depositId, uint256 amount);
 
     /// @dev Errors
-    error NotAdmin();
     error CantEnter();
     error ZeroBalance();
     error CantCompound();
@@ -132,9 +132,15 @@ contract MetarixStaking_V1 {
     error FailedToGiveAllowance();
 
     /// @dev Constructor
-    constructor(address _metarix) {
+    constructor() {
+        _disableInitializers();
+    }
+
+    function initialize(address _metarix) initializer public {
+        __Ownable_init();
+        __UUPSUpgradeable_init();
+
         metarix = IToken(_metarix);
-        admin = msg.sender;
         
         // Create pools
         pools.push(Pool(0, 1000, 30, 0, true));
@@ -150,21 +156,17 @@ contract MetarixStaking_V1 {
         isPaused = false;
     }
 
+    function _authorizeUpgrade(address newImplementation)
+        internal
+        onlyOwner
+        override
+    {}
+
     /// Modifier
     modifier nonReentrant() {
         _nonReentrantBefore();
         _;
         _nonReentrantAfter();
-    }
-
-    modifier onlyOwner() {
-        _onlyOwner();
-        _;
-    }
-
-    /// @dev Internal functions to save gas on modifier
-    function _onlyOwner() internal view {
-        if(msg.sender != admin) revert NotAdmin();
     }
 
     function _nonReentrantBefore() internal {
@@ -507,7 +509,7 @@ contract MetarixStaking_V1 {
             _balance = IToken(token).balanceOf(address(this));
         }
 
-        if(IToken(token).transfer(admin, _balance) == false) revert InvalidErc20Transfer();
+        if(IToken(token).transfer(owner(), _balance) == false) revert InvalidErc20Transfer();
 
         emit WithdrawErc20Tokens(token, _balance);
     }
@@ -516,7 +518,7 @@ contract MetarixStaking_V1 {
     function rescueBnb() external onlyOwner {
         uint256 _amount = address(this).balance;
 
-        (bool sent, ) = admin.call{value: _amount}("");
+        (bool sent, ) = owner().call{value: _amount}("");
         if(sent == false) revert FailedEthTransfer();
 
         emit RescueBNB(_amount);
