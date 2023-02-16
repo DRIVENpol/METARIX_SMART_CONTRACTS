@@ -2,9 +2,9 @@
 
 pragma solidity 0.8.17;
 
-import "./proxy/OwnableUpgradeable.sol";
-import "./proxy/Initializable.sol";
-import "./proxy/UUPSUpgradeable.sol";
+import "./OwnableUpgradeable.sol";
+import "./Initializable.sol";
+import "./UUPSUpgradeable.sol";
 
 interface IToken {
     function balanceOf(address account) external view returns (uint256);
@@ -136,11 +136,12 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         _disableInitializers();
     }
 
-    function initialize(address _metarix) initializer public {
+    function initialize() initializer public {
         __Ownable_init();
         __UUPSUpgradeable_init();
 
-        metarix = IToken(_metarix);
+        // Change on mainnet
+        metarix = IToken(0x6990Dc1F84af5335E757Fc392c3f4A2C5B1A4a68);
         
         // Create pools
         pools.push(Pool(0, 1000, 30, 0, true));
