@@ -573,7 +573,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     /// @dev Internal function to add a new deposit
     function _addDeposit(address user, uint256 poolId, uint256 amount) internal {
         Pool storage pool = pools[poolId];
-        
+
         uint256 _period = pool.periodInDays * 1 days;
 
 
@@ -603,7 +603,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         if(pools[poolId].enabled == false) revert PoolDisabled();
         if(isPaused == true) revert ContractIsPaused();
         if(pools.length == 0) revert InvalidPoolId();
-        if(poolId >= pools.length - 1) revert InvalidPoolId();
+        if(poolId > pools.length - 1) revert InvalidPoolId();
         if(amount == 0) revert InvalidAmount();
         if(metarix.balanceOf(msg.sender) < amount) revert CantStakeThatMuch();
         if(metarix.allowance(msg.sender, address(this)) < amount) revert NotEnoughAllowance();
@@ -615,7 +615,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     function _initChecks(uint256 depositId) internal view{
         if(isPaused == true) revert ContractIsPaused();
         if(deposits.length == 0) revert InvalidDeposit();
-        if(depositId >= deposits.length - 1) revert InvalidDeposit();
+        if(depositId > deposits.length - 1) revert InvalidDeposit();
     }
 
     /// @dev Internal function to set the increased APR for users
