@@ -601,7 +601,6 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
     /// @dev Internal function to do the initial checks on staking function
     function _initActionsStaking(uint256 poolId, uint256 amount) internal {
-        if(pools[poolId].enabled == false) revert PoolDisabled();
         if(isPaused == true) revert ContractIsPaused();
         if(pools.length == 0) revert InvalidPoolId();
         if(poolId >= pools.length - 1) revert InvalidPoolId();
