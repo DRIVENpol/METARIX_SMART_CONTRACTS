@@ -141,7 +141,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         __UUPSUpgradeable_init();
 
         // Change on mainnet
-        metarix = IToken(0x6990Dc1F84af5335E757Fc392c3f4A2C5B1A4a68);
+        metarix = IToken(0xd9145CCE52D386f254917e481eB44e9943F39138);
         
         // Create pools
         pools.push(Pool(0, 1000, 30, 0, true));
@@ -573,8 +573,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     /// @dev Internal function to add a new deposit
     function _addDeposit(address user, uint256 poolId, uint256 amount) internal {
         Pool storage pool = pools[poolId];
-
-        if(pool.enabled == false) revert PoolDisabled();
+        
         uint256 _period = pool.periodInDays * 1 days;
 
 
@@ -601,6 +600,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
     /// @dev Internal function to do the initial checks on staking function
     function _initActionsStaking(uint256 poolId, uint256 amount) internal {
+        if(pools[poolId].enabled == false) revert PoolDisabled();
         if(isPaused == true) revert ContractIsPaused();
         if(pools.length == 0) revert InvalidPoolId();
         if(poolId >= pools.length - 1) revert InvalidPoolId();
