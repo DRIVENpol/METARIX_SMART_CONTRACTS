@@ -333,7 +333,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         if(metarix.transferFrom(msg.sender, address(this), _totalAmount) != true) revert InvalidErc20Transfer();
 
         for(uint256 i = 0; i < users.length;) {
-            _addDeposit(users[i], amounts[i], poolIds[i]);
+            _addDeposit(users[i], poolIds[i], amounts[i]);
 
             if(isBoosted[i] == true) _setAprForUser(users[i], true);
 
