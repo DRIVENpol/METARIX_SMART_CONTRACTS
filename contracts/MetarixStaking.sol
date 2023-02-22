@@ -311,6 +311,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         // Compound
         myDeposit.amount += _pending;
         myDeposit.compounded += _pending;
+        totalStakedByPool[depositId] += _pending;
 
         emit Compound(msg.sender, _poolId, depositId, _pending);
     }
