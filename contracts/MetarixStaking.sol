@@ -144,7 +144,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         metarix = IToken(0x6990Dc1F84af5335E757Fc392c3f4A2C5B1A4a68);
         
         // Create pools
-        pools.push(Pool(0, 1000, 30, 0, true));
+        pools.push(Pool(0, 1000, 90, 0, true));
         pools.push(Pool(1, 2000, 180, 0, true));
         pools.push(Pool(2, 3000, 365, 0, true));
 
