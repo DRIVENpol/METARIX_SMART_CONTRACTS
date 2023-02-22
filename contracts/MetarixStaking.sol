@@ -488,17 +488,9 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     }
 
     /// @dev Function to withdraw tokens from the smart contract
-    ///      If the address == metarix, the owner will withdraw the
-    ///      rewards only - the user's funds can't be withdrawn
     function withdrawErc20Tokens(address token) external onlyOwner {
         uint256 _balance;
-
-        if(token == address(metarix)) {
-            _balance = registeredRewards;
-            registeredRewards = 0;
-        } else {
-            _balance = IToken(token).balanceOf(address(this));
-        }
+        _balance = IToken(token).balanceOf(address(this));
 
         if(IToken(token).transfer(owner(), _balance) == false) revert InvalidErc20Transfer();
 
