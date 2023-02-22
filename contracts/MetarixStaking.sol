@@ -9,7 +9,6 @@ import "./UUPSUpgradeable.sol";
 interface IToken {
     function balanceOf(address account) external view returns (uint256);
     function transfer(address to, uint256 amount) external returns (bool);
-    function approve(address spender, uint256 amount) external returns (bool);
     function allowance(address owner, address spender) external view returns (uint256);
     function transferFrom(address from, address to, uint256 amount) external returns (bool);
 }
@@ -132,7 +131,6 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     error NotEnoughAllowance();
     error AddressAlreadyInUse();
     error InvalidErc20Transfer();
-    error FailedToGiveAllowance();
 
     /// @dev Constructor
     constructor() {
@@ -226,7 +224,6 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         // Send rewards
         uint256 _totalAmount = _amount + _pending;
         
-        if(metarix.approve(_depositOwner, _totalAmount) != true) revert FailedToGiveAllowance();
         if(metarix.transfer(_depositOwner, _totalAmount) != true) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
@@ -267,7 +264,6 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         uint256 _takenFee = _amount * fee / 100;
         uint256 _totalAmount = _amount  - _takenFee;
         
-        if(metarix.approve(_depositOwner, _totalAmount) != true) revert FailedToGiveAllowance();
         if(metarix.transfer(myDeposit.owner, _totalAmount) != true) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
