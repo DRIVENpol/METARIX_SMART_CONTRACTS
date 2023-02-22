@@ -25,6 +25,9 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     /// @dev Tokens for rewards
     uint256 public registeredRewards;
 
+    /// @dev Collected fees
+    uint256 public collectedFees;
+
     /// @dev for re-entrancy protection
     uint256 private enter = 1;
 
@@ -271,6 +274,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         myPool.apr += aprFactor;
         --myPool.totalStakers;
         totalStakedByPool[_poolId] -= _totalAmount;
+        collectedFees += _takenFee;
 
         // Set the data for UI
         depositToStakedAmount[depositId] = _amount;
@@ -502,6 +506,12 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         if(IToken(token).transfer(owner(), _balance) == false) revert InvalidErc20Transfer();
 
         emit WithdrawErc20Tokens(token, _balance);
+    }
+
+    /// @dev Function to withdraw Metarix fees
+    function collectFees() external onlyOwner {
+        if(IToken(metarix).transfer(owner(), collectedFees) == false) revert InvalidErc20Transfer();
+        collectedFees = 0;
     }
 
     /// @dev Function to rescue BNB
