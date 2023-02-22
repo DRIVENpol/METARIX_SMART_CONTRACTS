@@ -552,7 +552,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     }
 
     /// @dev Function to fetch the staked amount for each deposit
-    function fetchTotalUntakedByPool(uint256 depositId) public view returns(uint256) {
+    function fetchTotalUnstakedByPool(uint256 depositId) public view returns(uint256) {
            return totalUnstakedByPool[depositId];
     }
 
