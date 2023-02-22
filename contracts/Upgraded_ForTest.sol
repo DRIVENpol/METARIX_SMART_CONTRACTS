@@ -25,6 +25,9 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     /// @dev Tokens for rewards
     uint256 public registeredRewards;
 
+    /// @dev Collected fees
+    uint256 public collectedFees;
+
     /// @dev for re-entrancy protection
     uint256 private enter = 1;
 
@@ -144,7 +147,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         metarix = IToken(0x6990Dc1F84af5335E757Fc392c3f4A2C5B1A4a68);
         
         // Create pools
-        pools.push(Pool(0, 1000, 30, 0, true));
+        pools.push(Pool(0, 1000, 90, 0, true));
         pools.push(Pool(1, 2000, 180, 0, true));
         pools.push(Pool(2, 3000, 365, 0, true));
 
@@ -271,6 +274,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         myPool.apr += aprFactor;
         --myPool.totalStakers;
         totalStakedByPool[_poolId] -= _totalAmount;
+        collectedFees += _takenFee;
 
         // Set the data for UI
         depositToStakedAmount[depositId] = _amount;
@@ -311,6 +315,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         // Compound
         myDeposit.amount += _pending;
         myDeposit.compounded += _pending;
+        totalStakedByPool[depositId] += _pending;
 
         emit Compound(msg.sender, _poolId, depositId, _pending);
     }
@@ -503,6 +508,12 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         emit WithdrawErc20Tokens(token, _balance);
     }
 
+    /// @dev Function to withdraw Metarix fees
+    function collectFees() external onlyOwner {
+        if(IToken(metarix).transfer(owner(), collectedFees) == false) revert InvalidErc20Transfer();
+        collectedFees = 0;
+    }
+
     /// @dev Function to rescue BNB
     function rescueBnb() external onlyOwner {
         uint256 _amount = address(this).balance;
@@ -642,7 +653,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         }
         return _pendingRewards / 100;
     }
-
+    
     function upgradedParameters() external onlyOwner {
         pools[0].periodInDays = 45;
     }
