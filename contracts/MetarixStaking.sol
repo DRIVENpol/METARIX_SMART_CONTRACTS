@@ -45,6 +45,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
     /// @dev Analytics
     mapping(uint256 => uint256) public totalStakedByPool;
+    mapping(uint256 => uint256) public totalUnstakedByPool;
 
     /// @dev Link an address to deposit with id
     mapping(address => uint256[]) public userDeposits;
@@ -229,7 +230,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         // Increase the APR by aprFactor% for each new staker
         myPool.apr += aprFactor;
         --myPool.totalStakers;
-        totalStakedByPool[_poolId] -= _amount;
+        totalUnstakedByPool[_poolId] += _amount;
 
         // Set the data for UI
         depositToStakedAmount[depositId] = _amount;
@@ -269,7 +270,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         // Increase the APR by aprFactor% for each new staker
         myPool.apr += aprFactor;
         --myPool.totalStakers;
-        totalStakedByPool[_poolId] -= _totalAmount;
+        totalUnstakedByPool[_poolId] += _totalAmount;
         collectedFees += _takenFee;
 
         // Set the data for UI
