@@ -147,8 +147,6 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         pools.push(Pool(0, 1000, 30, 0, true));
         pools.push(Pool(1, 2000, 180, 0, true));
         pools.push(Pool(2, 3000, 365, 0, true));
-        pools.push(Pool(3, 500, 7, 0, false));
-        pools.push(Pool(4, 750, 14, 0, false));
 
         aprFactor = 13; // 0.13%
         aprFactorForUsers = 250; // 2.5%
