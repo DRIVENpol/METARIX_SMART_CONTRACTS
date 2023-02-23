@@ -91,28 +91,6 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     Pool[] public pools;
     Deposit[] public deposits;
 
-
-    /// @dev Events
-    event TogglePause(bool status);
-    event NewAprFactor(uint256 apr);
-    event RescueBNB(uint256 amount);
-    event NewEmergencyFee(uint256 fee);
-    event NewCompoundPeriod(uint256 period);
-    event NewAprFactorForUsers(uint256 apr);
-    event AddPool(uint256 apr, uint256 period);
-    event NewTokenAddress(address indexed token);
-    event NewApr(uint256 poolId, uint256 newApr);
-    event EnablePool(uint256 poolId, bool status);
-    event DisablePool(uint256 poolId, bool status);
-    event SetNormalAprFor(address indexed user, bool status);
-    event SendTokensBack(address indexed user, uint256 amount);
-    event SetIncreasedAprFor(address indexed user, bool status);
-    event WithdrawErc20Tokens(address indexed token, uint256 amount);
-    event Stake(address indexed user, uint256 poolId, uint256 amount);
-    event Unstake(address indexed user, uint256 poolId, uint256 depositId, uint256 amount);
-    event Compound(address indexed user, uint256 poolId, uint256 depositId, uint256 amount);
-    event EmergencyWithdraw(address indexed user, uint256 poolId, uint256 depositId, uint256 amount);
-
     /// @dev Errors
     error CantEnter();
     error ZeroBalance();
@@ -143,7 +121,7 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         __UUPSUpgradeable_init();
 
         // Change on mainnet
-        metarix = IToken(0x6990Dc1F84af5335E757Fc392c3f4A2C5B1A4a68);
+        metarix = IToken(0x08B87b1cFdba00dFb79D77Cac1a5970ba6c9cDE2);
         
         // Create pools
         pools.push(Pool(0, 1000, 90, 0, true));
@@ -188,8 +166,6 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         _initActionsStaking(poolId, amount);
 
         _addDeposit(msg.sender, poolId, amount);
-
-        emit Stake(msg.sender, poolId, amount);
     }
     
     /// @dev Function to unstake
@@ -228,16 +204,16 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         if(metarix.transfer(_depositOwner, _totalAmount) != true) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
+        unchecked {
         myPool.apr += aprFactor;
-        --myPool.totalStakers;
-        totalUnstakedByPool[_poolId] += _amount;
+        totalUnstakedByPool[_poolId] += _amount;            
+        }
+
+       --myPool.totalStakers;
 
         // Set the data for UI
         depositToStakedAmount[depositId] = _amount;
         depositToReceivedRewards[depositId] = _pending;
-        
-
-        emit Unstake(msg.sender, _poolId, depositId, _totalAmount);
     }
 
     /// @dev Function for emergency withdraw
@@ -268,10 +244,13 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         if(metarix.transfer(myDeposit.owner, _totalAmount) != true) revert InvalidErc20Transfer();
 
         // Increase the APR by aprFactor% for each new staker
-        myPool.apr += aprFactor;
         --myPool.totalStakers;
+        
+        unchecked {
+        myPool.apr += aprFactor;
         totalUnstakedByPool[_poolId] += _totalAmount;
-        collectedFees += _takenFee;
+        collectedFees += _takenFee;          
+        }
 
         // Set the data for UI
         depositToStakedAmount[depositId] = _amount;
@@ -279,8 +258,6 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
         // Used emergency withdraw
         usedEmergency[msg.sender][depositId] = true;
-
-        emit EmergencyWithdraw(msg.sender, _poolId, depositId, _totalAmount);
     }
 
     /// @dev Function to compound the pending rewards
@@ -310,11 +287,11 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         registeredRewards -= _pending;
 
         // Compound
+        unchecked {
         myDeposit.amount += _pending;
         myDeposit.compounded += _pending;
-        totalStakedByPool[depositId] += _pending;
-
-        emit Compound(msg.sender, _poolId, depositId, _pending);
+        totalStakedByPool[depositId] += _pending;       
+        }
     }
 
     /// @dev Function for owner to migrate users from the old smart contract
@@ -348,46 +325,32 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     /// @dev Function to change the apr factor
     function changeAprFactor(uint256 newFactor) external onlyOwner {
         aprFactor = newFactor;
-
-        emit NewAprFactor(newFactor);
     }
 
     /// @dev Function to change the apr factor
     function changeAprFactorForUsers(uint256 newFactor) external onlyOwner {
         aprFactorForUsers = newFactor;
-
-        emit NewAprFactorForUsers(newFactor);
     }
 
     /// @dev Function to change the fee for emergency withdraw
     function changeEmergencyFee(uint256 newFee) external onlyOwner {
         fee = newFee;
-    
-        emit NewEmergencyFee(newFee);
     }
 
     /// @dev Function to change the compound period
     function changeCompoundPeriod(uint256 newPeriod) external onlyOwner {
         compoundPeriod = newPeriod * 1 hours;
-
-        emit NewCompoundPeriod(newPeriod * 1 hours);
     }
 
     /// @dev Function to set user with increased apr
     function setIncreasedAprForUser(address user) external onlyOwner {
             _setAprForUser(user, true);
-
-        emit SetIncreasedAprFor(user, true);
     }
 
     /// @dev Funciton to set users with increased apr
     function setIncreasedAprForUsers(address[] calldata users) external onlyOwner {
         for(uint256 i=0; i< users.length;) {
-
             _setAprForUser(users[i], true);
-
-            emit SetIncreasedAprFor(users[i], true);
-
             unchecked { ++i; }
         }
     }
@@ -395,17 +358,12 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     /// @dev Function to set user with normal apr again
     function setNormalAprForUser(address user) external onlyOwner {
         _setAprForUser(user, false);
-
-        emit SetNormalAprFor(user, false);
     }
 
     /// @dev Funciton to set users with normal apr again
     function setNormalAprForUsers(address[] calldata users) external onlyOwner {
         for(uint256 i=0; i< users.length;) {
-
             _setAprForUser(users[i], true);
-
-            emit SetNormalAprFor(users[i], false);
             unchecked { ++i; }
         }
     }
@@ -413,16 +371,12 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     /// @dev Function to disable a pool
     function disablePool(uint256 poolId) external onlyOwner {
         pools[poolId].enabled = false;
-
-        emit DisablePool(poolId, false);
     }
 
     /// @dev Function to disable all pools
     function disableAllPools() external onlyOwner {
         for(uint256 i=0; i< pools.length;) {
             pools[i].enabled = false;
-
-            emit DisablePool(i, false);
             unchecked { ++i; }
         }
     }
@@ -430,16 +384,12 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     /// @dev Function to enable a pool
     function enablePool(uint256 poolId) external onlyOwner {
         pools[poolId].enabled = true;
-
-        emit EnablePool(poolId, true);
     }
 
     /// @dev Function to disable all pools
     function enableAllPools() external onlyOwner {
         for(uint256 i=0; i< pools.length;) {
             pools[i].enabled = true;
-
-            emit EnablePool(i, true);
             unchecked { ++i; }
         }
     }
@@ -447,16 +397,12 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
     /// @dev Function to set APR for a specific pool
     function setNewApr(uint256 poolId, uint256 newApr) external onlyOwner {
         pools[poolId].apr = newApr;
-
-        emit NewApr(poolId, newApr);
     }
 
     /// @dev Funciton to add a new pool
     function addPool(uint256 apr, uint256 period) external onlyOwner {
         uint256 _id = pools.length;
         pools.push(Pool(_id, apr, period, 0, true));
-
-        emit AddPool(apr, period);
     }
 
     /// @dev Function to register the tokens allocated for rewards
@@ -475,16 +421,12 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         } else {
             isPaused = true;
         }
-
-        emit TogglePause(isPaused);
     }
 
     /// @dev Change the Metarix address in case of migration
     function changeMetarixAddress(address newToken) external onlyOwner {
         if(newToken == address(metarix)) revert AddressAlreadyInUse();
         metarix = IToken(newToken);
-
-        emit NewTokenAddress(newToken);
     }
 
     /// @dev Function to withdraw tokens from the smart contract
@@ -493,8 +435,6 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         _balance = IToken(token).balanceOf(address(this));
 
         if(IToken(token).transfer(owner(), _balance) == false) revert InvalidErc20Transfer();
-
-        emit WithdrawErc20Tokens(token, _balance);
     }
 
     /// @dev Function to withdraw Metarix fees
@@ -509,8 +449,6 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
 
         (bool sent, ) = owner().call{value: _amount}("");
         if(sent == false) revert FailedEthTransfer();
-
-        emit RescueBNB(_amount);
     }
 
     /// @dev Function to fetch user's deposits
@@ -594,9 +532,10 @@ contract MetarixStaking_V1 is Initializable, OwnableUpgradeable, UUPSUpgradeable
         deposits.push(newDeposit);
 
         // Analytics
-        unchecked {++pool.totalStakers;}
-
-        totalStakedByPool[poolId] += amount;
+        unchecked {
+            ++pool.totalStakers;
+            totalStakedByPool[poolId] += amount;
+        }
 
         pool.apr -= aprFactor;
     }
